@@ -1,0 +1,154 @@
+{
+	"info": {
+		"_postman_id": "4163bdf4-f06f-4905-9051-a33dfb1ef2ae",
+		"name": "MojKoticek_Requests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32365203"
+	},
+	"item": [
+		{
+			"name": "localhost:8080/posts",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/posts",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"posts"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "localhost:8080/post?post_id=67334c500be0792ec24d3b2c",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/post?post_id=67334c500be0792ec24d3b2c",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"post"
+					],
+					"query": [
+						{
+							"key": "post_id",
+							"value": "67334c500be0792ec24d3b2c"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "localhost:8080/post",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"username\":\"Tets\",\"problem\":\"Ubit se hocem\",\"date\":\"2024-02-02\",\"comments\":[]}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:8080/post",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"post"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "localhost:8080/comment",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n\"post_id\": \"67334c500be0792ec24d3b2c\",\r\n\"username\": \"Test 2\",\r\n\"description\": \"Te pa se daj\",\r\n\"date\": \"2024-02-02\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:8080/comment",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"comment"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "localhost:8080/post?post_id=67334c500be0792ec24d3b2c",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/post?post_id=67334c500be0792ec24d3b2c",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"post"
+					],
+					"query": [
+						{
+							"key": "post_id",
+							"value": "67334c500be0792ec24d3b2c"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "localhost:8080/comment?comment_id=67334d760be0792ec24d3b2d",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/comment?comment_id=67334d760be0792ec24d3b2d",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"comment"
+					],
+					"query": [
+						{
+							"key": "comment_id",
+							"value": "67334d760be0792ec24d3b2d"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
