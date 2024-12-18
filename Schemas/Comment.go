@@ -8,4 +8,5 @@ type Comment struct {
 	Username    string             `json:"username" bson:"username"`
 	Description string             `json:"description" bson:"description"`
 	Date        string             `json:"date" bson:"date"`
+	LikeCount   int                `json:"likeCount" bson:"likeCount"`
 }
