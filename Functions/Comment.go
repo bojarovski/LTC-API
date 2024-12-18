@@ -4,11 +4,12 @@ import (
 	"backend/Mongo"
 	"backend/Schemas"
 	"context"
+	"net/http"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"net/http"
-	"time"
 )
 
 func GetAllCommentsForPost(postId string) (comments []Schemas.Comment, err error) {
@@ -29,11 +30,6 @@ func GetAllCommentsForPost(postId string) (comments []Schemas.Comment, err error
 			comments = append(comments, comment)
 		}
 	}
-
-	/*if err := cursor.Err(); err != nil {
-		return
-	}*/
-
 	return
 }
 

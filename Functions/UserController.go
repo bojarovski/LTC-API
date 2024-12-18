@@ -3,10 +3,13 @@ package Functions
 import (
 	"backend/Mongo"
 	"backend/Schemas"
+	"net/http"
+	"regexp"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
-	"net/http"
 )
 
 func GetProfile(c *gin.Context) {
@@ -62,6 +65,7 @@ func Login(c *gin.Context) {
 	})
 }
 
+// Register handles user registration
 func Register(c *gin.Context) {
 	var user Schemas.User
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -69,6 +73,46 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	// Validate Name
+	if len(strings.TrimSpace(user.Name)) < 3 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Name must be at least 3 characters long"})
+		return
+	}
+
+	// Validate Email
+	if user.Email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Email cannot be empty"})
+		return
+	}
+
+	// Simple regex for email validation
+	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	re := regexp.MustCompile(emailRegex)
+	if !re.MatchString(user.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid email format"})
+		return
+	}
+
+	// Validate Password
+	if len(user.Password) < 8 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Password must be at least 8 characters long"})
+		return
+	}
+
+	// Check if password contains at least one number
+	hasNumber := false
+	for _, c := range user.Password {
+		if c >= '0' && c <= '9' {
+			hasNumber = true
+			break
+		}
+	}
+	if !hasNumber {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Password must contain at least one number"})
+		return
+	}
+
+	// Hash the password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error hashing password"})
@@ -76,6 +120,7 @@ func Register(c *gin.Context) {
 	}
 	user.Password = string(hashedPassword)
 
+	// Insert user into the database
 	client := Mongo.GetMongoDB()
 	_, err = client.Database("tezno_district").Collection("users").InsertOne(c, user)
 	if err != nil {
@@ -85,7 +130,6 @@ func Register(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
-
 func ChangePassword(c *gin.Context) {
 	var changePassword struct {
 		Username    string `json:"username"`
