@@ -1,7 +1,6 @@
 package main
 
 import (
-	"backend/Functions"
 	"backend/HTTP"
 	"backend/Mongo"
 
@@ -27,12 +26,6 @@ func main() {
 
 	// Set up HTTP routes
 	HTTP.Router(router)
-
-	// Add WebSocket endpoint for global chat
-	router.GET("/ws", Functions.HandleConnections)
-
-	// Start broadcasting messages in a goroutine
-	go Functions.BroadcastMessages()
 
 	// Start the server
 	if err := router.Run("localhost:8080"); err != nil {

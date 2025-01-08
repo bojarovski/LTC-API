@@ -24,4 +24,9 @@ func Router(router *gin.Engine) {
 	router.POST("/comment/like", Functions.LikeComment)
 
 	router.GET("/lock_old_posts", Functions.LockOldPostsHandler)
+
+	router.POST("/create_room", Functions.CreateRoom) // Create a new chatroom
+	router.GET("/rooms", Functions.GetAllRooms)       // List all available chatrooms
+	router.GET("/ws", Functions.HandleConnections)    // WebSocket for joining a specific chatroom
+
 }
