@@ -17,6 +17,7 @@ func Router(router *gin.Engine) {
 	router.POST("/post", Functions.CreatePost)
 	router.DELETE("/post", Functions.DeletePost)
 	router.POST("/post/like", Functions.LikePost)
+	router.GET("/post/summarize", Functions.SummarizePost)
 
 	router.POST("/comment", Functions.CreateComment)
 	router.DELETE("/comment", Functions.DeleteComment)

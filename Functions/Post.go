@@ -1,12 +1,10 @@
 package Functions
 
 import (
+	"backend/FunctionsHelper"
 	"backend/Mongo"
 	"backend/Schemas"
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -15,75 +13,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-func CallAIService(question string) (string, error) {
-
-	apiURL := "https://api.openai.com/v1/chat/completions"
-	apiKey := "apikey"
-
-	requestBody := map[string]interface{}{
-		"model": "gpt-4o-mini",
-		"store": true,
-		"messages": []map[string]string{
-			{"role": "system", "content": "You are an AI assistant for a Q&A site. Your purpose is to provide the first helpful and concise answer to users' questions."},
-			{"role": "user", "content": question},
-		},
-		"max_tokens": 50,
-	}
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		log.Printf("Error marshaling request body: %v", err)
-		return "", fmt.Errorf("failed to marshal request body: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		log.Printf("Error creating request: %v", err)
-		return "", fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("HTTP request failed: %v", err)
-		return "", fmt.Errorf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := ioutil.ReadAll(resp.Body)
-		log.Printf("OpenAI API error response: %s", string(bodyBytes))
-		return "", fmt.Errorf("API call failed with status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-	var responseData map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
-		log.Printf("Error decoding response: %v", err)
-		return "", fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	choices, ok := responseData["choices"].([]interface{})
-	if !ok || len(choices) == 0 {
-		log.Printf("Unexpected response structure: %+v", responseData)
-		return "", fmt.Errorf("no choices found in response")
-	}
-
-	message, ok := choices[0].(map[string]interface{})["message"].(map[string]interface{})
-	if !ok {
-		log.Printf("Message structure missing in response: %+v", choices[0])
-		return "", fmt.Errorf("message structure not found in choices")
-	}
-
-	content, ok := message["content"].(string)
-	if !ok {
-		log.Printf("Content missing in message: %+v", message)
-		return "", fmt.Errorf("content not found in message")
-	}
-
-	return content, nil
-}
 
 func GetPost(c *gin.Context) {
 	postId := c.Query("post_id")
@@ -110,6 +39,53 @@ func GetPost(c *gin.Context) {
 	post.Comments = comments
 
 	c.JSON(http.StatusOK, post)
+}
+
+func SummarizePost(c *gin.Context) {
+	postId := c.Query("post_id")
+	if postId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "post_id is required"})
+		return
+	}
+
+	objId, err := primitive.ObjectIDFromHex(postId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid post_id"})
+		return
+	}
+
+	var post Schemas.Post
+	err = Mongo.GetCollection("studenci_district").FindOne(c, bson.M{"_id": objId}).Decode(&post)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Post not found"})
+		return
+	}
+
+	// Fetch all comments for the post
+	comments, err := GetAllCommentsForPost(post.ID.Hex())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error decoding comments for post"})
+		return
+	}
+
+	// Build a single string with post content and all comments
+	contentToSummarize := fmt.Sprintf("Post: %s\n\nComments:\n", post.Problem)
+	for _, comment := range comments {
+		contentToSummarize += fmt.Sprintf("- %s: %s\n", comment.Username, comment.Description)
+	}
+
+	// Call AI service to summarize the content
+	aiSummary, err := FunctionsHelper.CallAIService(contentToSummarize, 200, "Summarize the following post and its comments concisely:")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error summarizing content"})
+		return
+	}
+
+	// Respond with the AI-generated summary
+	c.JSON(http.StatusOK, gin.H{
+		"post_id": post.ID.Hex(),
+		"summary": aiSummary,
+	})
 }
 
 func GetAllPosts(c *gin.Context) {
@@ -175,6 +151,18 @@ func CreatePost(c *gin.Context) {
 	// Set the current date automatically on the backend
 	post.Date = time.Now().Format("2006-01-02")
 
+	aiResponseV, err := FunctionsHelper.CallAIService(post.Problem, 1, "You are a bot that checks if the post is appropriate or not. By appropriate it is meant there are bad words. If it is appropriate return 1; else return 0.")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error generating AI response"})
+		return
+	}
+
+	if aiResponseV == "0" { // Assuming aiResponse is a string; modify if it's a different type
+		log.Println("AI Response not approved: AI returned 0")
+		c.JSON(http.StatusForbidden, gin.H{"message": "Not approved by AI"}) // HTTP 403 Forbidden
+		return
+	}
+
 	// Insert the post into the database
 	insertResult, err := Mongo.GetCollection("studenci_district").InsertOne(c, post)
 	if err != nil {
@@ -183,7 +171,7 @@ func CreatePost(c *gin.Context) {
 	}
 
 	// Generate an AI response for the post problem
-	aiResponse, err := CallAIService(post.Problem)
+	aiResponse, err := FunctionsHelper.CallAIService(post.Problem, 50, "You are an AI assistant for a Q&A site. Your purpose is to provide the first helpful and concise answer to users' questions. There is no followup. There is just your answer and it is not posible to ask for more information.")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error generating AI response"})
 		return

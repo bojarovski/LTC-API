@@ -1,9 +1,11 @@
 package Functions
 
 import (
+	"backend/FunctionsHelper"
 	"backend/Mongo"
 	"backend/Schemas"
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -35,17 +37,44 @@ func GetAllCommentsForPost(postId string) (comments []Schemas.Comment, err error
 
 func CreateComment(c *gin.Context) {
 	var comment Schemas.Comment
+
+	// Bind the JSON body to the comment struct
 	if err := c.ShouldBindJSON(&comment); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid request"})
 		return
 	}
 
-	_, err := Mongo.GetCollection("melje_district").InsertOne(c, comment)
+	// Validate the comment description
+	if comment.Description == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Comment description cannot be empty"})
+		return
+	}
+
+	// Validate the comment with AI
+	aiResponseV, err := FunctionsHelper.CallAIService(comment.Description, 1, "You are a bot that checks if the post is appropriate or not. By appropriate it is meant there are bad words. If it is appropriate return 1; else return 0.")
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error generating AI response"})
+		return
+	}
+
+	// Check AI's approval
+	if aiResponseV == "0" { // Assuming aiResponseV is a string
+		log.Println("AI Response not approved: AI returned 0")
+		c.JSON(http.StatusForbidden, gin.H{"message": "Not approved by AI"}) // HTTP 403 Forbidden
+		return
+	}
+
+	// Set additional fields in the comment object
+	comment.Date = time.Now().Format("2006-01-02")
+
+	// Insert the comment into the MongoDB collection
+	_, insertErr := Mongo.GetCollection("melje_district").InsertOne(c, comment)
+	if insertErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating comment"})
 		return
 	}
 
+	// Respond with success
 	c.JSON(http.StatusOK, gin.H{"message": "Comment added successfully"})
 }
 
