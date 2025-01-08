@@ -4,6 +4,7 @@ import (
 	"backend/FunctionsHelper"
 	"backend/Mongo"
 	"backend/Schemas"
+	cronjobs "backend/cronJobs"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+func LockOldPostsHandler(c *gin.Context) {
+	// Call the LockOldPosts function
+	cronjobs.LockOldPosts()
+
+	// Respond with a success message
+	c.JSON(http.StatusOK, gin.H{"message": "LockOldPosts executed successfully"})
+}
 
 func GetPost(c *gin.Context) {
 	postId := c.Query("post_id")

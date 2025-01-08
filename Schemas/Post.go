@@ -8,5 +8,6 @@ type Post struct {
 	Problem   string             `json:"problem" bson:"problem"`
 	Date      string             `json:"date" bson:"date"`
 	LikeCount int                `json:"likeCount" bson:"likeCount"`
+	Locked    bool               `json:"locked" bson:"locked"`
 	Comments  []Comment          `json:"comments"`
 }

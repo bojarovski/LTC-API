@@ -22,4 +22,6 @@ func Router(router *gin.Engine) {
 	router.POST("/comment", Functions.CreateComment)
 	router.DELETE("/comment", Functions.DeleteComment)
 	router.POST("/comment/like", Functions.LikeComment)
+
+	router.GET("/lock_old_posts", Functions.LockOldPostsHandler)
 }
