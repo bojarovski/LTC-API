@@ -3,7 +3,11 @@ package Functions
 import (
 	"backend/Mongo"
 	"backend/Schemas"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,6 +15,75 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+func CallAIService(question string) (string, error) {
+
+	apiURL := "https://api.openai.com/v1/chat/completions"
+	apiKey := "apikey"
+
+	requestBody := map[string]interface{}{
+		"model": "gpt-4o-mini",
+		"store": true,
+		"messages": []map[string]string{
+			{"role": "system", "content": "You are an AI assistant for a Q&A site. Your purpose is to provide the first helpful and concise answer to users' questions."},
+			{"role": "user", "content": question},
+		},
+		"max_tokens": 50,
+	}
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		log.Printf("Error marshaling request body: %v", err)
+		return "", fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		log.Printf("Error creating request: %v", err)
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("HTTP request failed: %v", err)
+		return "", fmt.Errorf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		log.Printf("OpenAI API error response: %s", string(bodyBytes))
+		return "", fmt.Errorf("API call failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+	var responseData map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
+		log.Printf("Error decoding response: %v", err)
+		return "", fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	choices, ok := responseData["choices"].([]interface{})
+	if !ok || len(choices) == 0 {
+		log.Printf("Unexpected response structure: %+v", responseData)
+		return "", fmt.Errorf("no choices found in response")
+	}
+
+	message, ok := choices[0].(map[string]interface{})["message"].(map[string]interface{})
+	if !ok {
+		log.Printf("Message structure missing in response: %+v", choices[0])
+		return "", fmt.Errorf("message structure not found in choices")
+	}
+
+	content, ok := message["content"].(string)
+	if !ok {
+		log.Printf("Content missing in message: %+v", message)
+		return "", fmt.Errorf("content not found in message")
+	}
+
+	return content, nil
+}
 
 func GetPost(c *gin.Context) {
 	postId := c.Query("post_id")
@@ -73,8 +146,6 @@ func GetAllPosts(c *gin.Context) {
 
 	c.JSON(http.StatusOK, posts)
 }
-
-// CreatePost handles the creation of a new post
 func CreatePost(c *gin.Context) {
 	var post Schemas.Post
 
@@ -102,18 +173,46 @@ func CreatePost(c *gin.Context) {
 	}
 
 	// Set the current date automatically on the backend
-	// The current date in "YYYY-MM-DD" format
 	post.Date = time.Now().Format("2006-01-02")
 
 	// Insert the post into the database
-	_, err := Mongo.GetCollection("studenci_district").InsertOne(c, post)
+	insertResult, err := Mongo.GetCollection("studenci_district").InsertOne(c, post)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating post"})
 		return
 	}
 
+	// Generate an AI response for the post problem
+	aiResponse, err := CallAIService(post.Problem)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error generating AI response"})
+		return
+	}
+	log.Printf("AI Response: %s", aiResponse)
+
+	postID, ok := insertResult.InsertedID.(primitive.ObjectID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving inserted post ID"})
+		return
+	}
+
+	// Create a comment object with AI response
+	comment := Schemas.Comment{
+		Username:    "AI",
+		Date:        time.Now().Format("2006-01-02"),
+		Description: aiResponse,
+		PostId:      postID.Hex(), // Use the post's ID as reference
+	}
+
+	// Insert the AI-generated comment into the comments collection
+	_, err = Mongo.GetCollection("melje_district").InsertOne(c, comment)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error adding AI comment"})
+		return
+	}
+
 	// Respond with success message
-	c.JSON(http.StatusOK, gin.H{"message": "Post added successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Post and AI comment added successfully"})
 }
 
 func DeletePost(c *gin.Context) {
