@@ -1,6 +1,7 @@
 package Functions
 
 import (
+	"backend/FunctionsHelper"
 	"log"
 	"net/http"
 	"sync"
@@ -54,8 +55,25 @@ func HandleConnections(c *gin.Context) {
 			break
 		}
 
-		// Send the message to the broadcast channel
-		broadcast <- msg
+		// Check the message content with AI
+		isAppropriate, err := FunctionsHelper.CallAIService(msg.Content, 1, "You are a bot that checks if the post is appropriate or not. By appropriate it is meant there are bad words. If it is appropriate return 1; else return 0.")
+		if err != nil {
+			log.Printf("AI check error: %v", err)
+			continue
+		}
+
+		if isAppropriate == "1" {
+			// Add to the broadcast channel if appropriate
+			broadcast <- msg
+		} else {
+			// Log or notify that the message was blocked
+			log.Printf("Message blocked by AI: %s", msg.Content)
+			hiddenMessage := Message{
+				Username: msg.Username,
+				Content:  "This message was hidden by AI moderation.",
+			}
+			broadcast <- hiddenMessage
+		}
 	}
 }
 
