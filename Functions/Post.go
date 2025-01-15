@@ -23,6 +23,41 @@ func LockOldPostsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "LockOldPosts executed successfully"})
 }
 
+func AddTag(c *gin.Context) {
+	var tag Schemas.Tag
+
+	// Bind the JSON body to the tag struct
+	if err := c.ShouldBindJSON(&tag); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid request"})
+		return
+	}
+
+	// Validate that the tag name is not empty
+	if tag.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Tag name cannot be empty"})
+		return
+	}
+
+	// Check the maximum length of the tag name (e.g., 50 characters)
+	if len(tag.Name) > 50 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Tag name cannot exceed 50 characters"})
+		return
+	}
+
+	// Set the current date automatically on the backend
+	tag.DateAdded = time.Now().Format("2006-01-02")
+
+	// Insert the tag into the database
+	_, err := Mongo.GetCollection("tags").InsertOne(c, tag)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error adding tag"})
+		return
+	}
+
+	// Respond with success message
+	c.JSON(http.StatusOK, gin.H{"message": "Tag added successfully"})
+}
+
 func GetPost(c *gin.Context) {
 	postId := c.Query("post_id")
 	if postId == "" {
@@ -157,16 +192,38 @@ func CreatePost(c *gin.Context) {
 		return
 	}
 
+	// ─────────────────────────────────────────────────────────────────────────────
+	// NEW SECTION: Check for existing tags in the database and replace them with IDs
+	if len(post.Tags) > 0 {
+		finalTagIDs := []string{}
+		for _, tagName := range post.Tags {
+			var dbTag Schemas.Tag
+			// Try to find the tag by name in the "tags" collection
+			err := Mongo.GetCollection("tags").FindOne(c, bson.M{"name": tagName}).Decode(&dbTag)
+			if err == nil {
+				// If found, append the Tag's ID to finalTagIDs
+				finalTagIDs = append(finalTagIDs, dbTag.ID)
+			} else {
+				// If not found, we skip it (do not create a new tag)
+				log.Printf("Tag not found for name: %s, skipping", tagName)
+			}
+		}
+		// Replace the post's Tags with the found tag IDs
+		post.Tags = finalTagIDs
+	}
+	// ─────────────────────────────────────────────────────────────────────────────
+
 	// Set the current date automatically on the backend
 	post.Date = time.Now().Format("2006-01-02")
 
+	// AI check for appropriate post
 	aiResponseV, err := FunctionsHelper.CallAIService(post.Problem, 1, "You are a bot that checks if the post is appropriate or not. By appropriate it is meant there are bad words. If it is appropriate return 1; else return 0.")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error generating AI response"})
 		return
 	}
 
-	if aiResponseV == "0" { // Assuming aiResponse is a string; modify if it's a different type
+	if aiResponseV == "0" {
 		log.Println("AI Response not approved: AI returned 0")
 		c.JSON(http.StatusForbidden, gin.H{"message": "Not approved by AI"}) // HTTP 403 Forbidden
 		return
@@ -193,7 +250,7 @@ func CreatePost(c *gin.Context) {
 		return
 	}
 
-	// Create a comment object with AI response
+	// Create a comment object with the AI response
 	comment := Schemas.Comment{
 		Username:    "AI",
 		Date:        time.Now().Format("2006-01-02"),

@@ -10,4 +10,5 @@ type Post struct {
 	LikeCount int                `json:"likeCount" bson:"likeCount"`
 	Locked    bool               `json:"locked" bson:"locked"`
 	Comments  []Comment          `json:"comments"`
+	Tags      []string           `json:"tags" bson:"tags"` // New field for tags
 }
