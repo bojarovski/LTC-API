@@ -31,5 +31,6 @@ func Router(router *gin.Engine) {
 
 	router.POST("/add_tag", Functions.AddTag)
 	router.GET("/tags/names", Functions.GetAllTagNames)
+	router.GET("/tagById", Functions.GetTagNameByID)
 
 }

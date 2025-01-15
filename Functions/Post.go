@@ -412,3 +412,33 @@ func GetAllTagNames(c *gin.Context) {
 	// Return an array of tag names as JSON
 	c.JSON(http.StatusOK, tagNames)
 }
+
+func GetTagNameByID(c *gin.Context) {
+	// Retrieve "id" from the query string
+	idParam := c.Query("id")
+	if idParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "id query parameter is required"})
+		return
+	}
+
+	// Convert the hex string to a MongoDB ObjectID
+	oid, err := primitive.ObjectIDFromHex(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid MongoDB ID format"})
+		return
+	}
+
+	// Query the "tags" collection
+	tagsCollection := Mongo.GetCollection("tags")
+
+	// Attempt to find the tag document by _id
+	var dbTag Schemas.Tag
+	err = tagsCollection.FindOne(c, bson.M{"_id": oid}).Decode(&dbTag)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Tag not found"})
+		return
+	}
+
+	// Return just the tag name (or the entire tag, if you prefer)
+	c.JSON(http.StatusOK, gin.H{"tagName": dbTag.Name})
+}
