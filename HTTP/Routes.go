@@ -30,5 +30,6 @@ func Router(router *gin.Engine) {
 	router.GET("/ws", Functions.HandleConnections)    // WebSocket for joining a specific chatroom
 
 	router.POST("/add_tag", Functions.AddTag)
+	router.GET("/tags/names", Functions.GetAllTagNames)
 
 }

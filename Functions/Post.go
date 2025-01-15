@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -132,16 +133,60 @@ func SummarizePost(c *gin.Context) {
 	})
 }
 
+// GetAllPosts allows optional filtering by tag names
 func GetAllPosts(c *gin.Context) {
-	var posts = make([]Schemas.Post, 0)
+	// Retrieve the optional "tags" query parameter (comma-separated tag names)
+	tagsParam := c.Query("tags")
 
-	cursor, err := Mongo.GetCollection("studenci_district").Find(c, bson.M{})
+	// By default, we'll fetch all posts unless tags are provided
+	filter := bson.M{}
+
+	if tagsParam != "" {
+		// Split the comma-separated string into an array of tag names
+		tagNames := strings.Split(tagsParam, ",")
+
+		// Trim spaces around tag names (optional good practice)
+		for i := range tagNames {
+			tagNames[i] = strings.TrimSpace(tagNames[i])
+		}
+
+		// Look up the corresponding Tag documents and collect their IDs
+		var tagIDs []string
+		for _, tagName := range tagNames {
+			var dbTag Schemas.Tag
+			err := Mongo.GetCollection("tags").FindOne(c, bson.M{"name": tagName}).Decode(&dbTag)
+			if err == nil {
+				// If we find the tag, append its ID to the slice
+				tagIDs = append(tagIDs, dbTag.ID)
+			} else {
+				// If not found, skip it (log or ignore)
+				fmt.Printf("Tag not found for name: %s\n", tagName)
+			}
+		}
+
+		// If we found any valid tag IDs, filter posts whose "tags" array
+		// contains *at least one* of these tag IDs.
+		if len(tagIDs) > 0 {
+			filter = bson.M{"tags": bson.M{"$in": tagIDs}}
+		} else {
+			// If no tag IDs found at all, optionally return empty results
+			// or keep filter empty to return all posts.
+			// Here we choose to return empty results:
+			filter = bson.M{"_id": primitive.NilObjectID} // always false
+		}
+	}
+
+	// Query the "studenci_district" collection using the filter
+	cursor, err := Mongo.GetCollection("studenci_district").Find(c, filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving posts"})
 		return
 	}
 	defer cursor.Close(c)
 
+	var posts []Schemas.Post
+
+	// Iterate over the cursor and decode each post
 	for cursor.Next(c) {
 		var post Schemas.Post
 		if err := cursor.Decode(&post); err != nil {
@@ -149,13 +194,14 @@ func GetAllPosts(c *gin.Context) {
 			return
 		}
 
+		// Optionally load comments for each post (if that's desired behavior)
 		comments, err := GetAllCommentsForPost(post.ID.Hex())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error decoding comments for post"})
 			return
 		}
-
 		post.Comments = comments
+
 		posts = append(posts, post)
 	}
 
@@ -164,8 +210,10 @@ func GetAllPosts(c *gin.Context) {
 		return
 	}
 
+	// Return the filtered posts
 	c.JSON(http.StatusOK, posts)
 }
+
 func CreatePost(c *gin.Context) {
 	var post Schemas.Post
 
@@ -334,4 +382,33 @@ func LikePost(c *gin.Context) {
 
 	// Return success response
 	c.JSON(http.StatusOK, gin.H{"message": "Post liked successfully"})
+}
+
+func GetAllTagNames(c *gin.Context) {
+	// Get the "tags" collection
+	tagsCollection := Mongo.GetCollection("tags")
+
+	// Find all documents in the "tags" collection
+	cursor, err := tagsCollection.Find(c, bson.M{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving tags"})
+		return
+	}
+	defer cursor.Close(c)
+
+	// Decode the results into a slice of Tag structs
+	var tagList []Schemas.Tag
+	if err := cursor.All(c, &tagList); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error decoding tags"})
+		return
+	}
+
+	// Extract only the "Name" field from each tag
+	var tagNames []string
+	for _, t := range tagList {
+		tagNames = append(tagNames, t.Name)
+	}
+
+	// Return an array of tag names as JSON
+	c.JSON(http.StatusOK, tagNames)
 }
